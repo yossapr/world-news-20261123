@@ -1,0 +1,17 @@
+{
+  "regions": {
+    "europe": ["Europe", "#1f4e79", "#6ea8e0"],
+    "middle-east": ["Middle East", "#a8600f", "#e0a94f"],
+    "asia": ["Asia", "#a8321f", "#ef6a4a"],
+    "africa": ["Africa", "#1c6b4a", "#4fbf8b"],
+    "americas": ["Americas", "#5a3a86", "#a987e0"],
+    "oceania": ["Oceania", "#0d6070", "#45c2d6"],
+    "world": ["World", "#43403a", "#c9ced4"]
+  },
+  "leads": [],
+  "cards": [],
+  "briefs": [],
+  "figures": [],
+  "labels": {},
+  "claims": []
+}

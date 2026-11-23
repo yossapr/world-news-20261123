@@ -17,6 +17,13 @@ const coast = readFileSync(here('./land-path.txt'), 'utf8').trim();
 const esc = (text) => String(text ?? '')
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
+// Until the desk publishes the day, edition.json holds no stories: say so plainly and stop, so
+// `npm run build` reads as "nothing to draw yet" instead of failing on an empty page.
+if (!edition.stories?.length) {
+  console.log(`the edition is not in yet: tools/edition.json holds no stories${edition.day ? ` (day ${edition.day})` : ''}`);
+  process.exit(0);
+}
+
 const DAY = edition.day;                     // '2026-11-24', the UTC day this edition covers
 const TITLE = words.title;                   // 'Monday 23 November 2026', as the masthead prints it
 const STORIES = edition.stories;
