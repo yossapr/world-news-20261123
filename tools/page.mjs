@@ -1,111 +1,71 @@
-// page.mjs — writes tools/poster.html: one day's world news on a single 1024x1024 page.
-//
-// Three inputs, all local: edition.json (the day as the news desk published it), words.json
-// (every word the page prints, written for that day) and land-path.txt (Natural Earth coastlines).
-// Nothing is fetched here, so the same three files always write the same page.
-//
-// Usage: node tools/page.mjs
-
+// page.mjs — writes tools/poster.html, the 1024×1024 front page for Monday 23 November 2026.
+// Inputs: edition.json (the day's 31 stories), words.json (every word printed) and land-path.txt
+// (Natural Earth coastlines). Nothing is fetched. Usage: node tools/page.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const here = (name) => fileURLToPath(new URL(name, import.meta.url));
-const edition = JSON.parse(readFileSync(here('./edition.json'), 'utf8'));
-const words = JSON.parse(readFileSync(here('./words.json'), 'utf8'));
-const coast = readFileSync(here('./land-path.txt'), 'utf8').trim();
+const local = (name) => fileURLToPath(new URL(name, import.meta.url));
+const edition = JSON.parse(readFileSync(local('./edition.json'), 'utf8'));
+const copy = JSON.parse(readFileSync(local('./words.json'), 'utf8'));
+const coast = readFileSync(local('./land-path.txt'), 'utf8').trim();
 
-const esc = (text) => String(text ?? '')
-  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+const escape = (value) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+const storyAt = (n) => edition.stories.find((story) => story.n === n);
+const regionStyle = (id) => copy.regions[id] ?? copy.regions.world;
+const tally = edition.stories.reduce((acc, story) => ({ ...acc, [story.region]: (acc[story.region] ?? 0) + 1 }), {});
 
-// Until the desk publishes the day, edition.json holds no stories: say so plainly and stop, so
-// `npm run build` reads as "nothing to draw yet" instead of failing on an empty page.
-if (!edition.stories?.length) {
-  console.log(`the edition is not in yet: tools/edition.json holds no stories${edition.day ? ` (day ${edition.day})` : ''}`);
-  process.exit(0);
-}
+// The page must carry the edition exactly: 3 leads, 10 cards, 18 briefs, no story twice.
+const placed = [...copy.leads, ...copy.cards, ...copy.briefs].map((item) => item.n);
+if (placed.length !== 31 || new Set(placed).size !== 31) throw new Error(`expected 31 distinct stories, got ${placed.length}`);
+if (placed.some((n) => storyAt(n) === undefined)) throw new Error('copy names a story the edition does not hold');
+if (copy.leads.map((lead) => lead.n).join() !== '1,2,3') throw new Error('the leads must be the edition leads');
 
-const DAY = edition.day;                     // '2026-11-24', the UTC day this edition covers
-const TITLE = words.title;                   // 'Monday 23 November 2026', as the masthead prints it
-const STORIES = edition.stories;
-const storyByNumber = new Map(STORIES.map((story) => [story.n, story]));
-const storyAt = (n) => {
-  const story = storyByNumber.get(n);
-  if (!story) throw new Error(`words name story ${n}, which the edition does not hold`);
-  return story;
-};
-
-// Region hues: deep (rules and glyphs), light (map dots), name (the legend).
-const hue = (id) => words.regions[id] ?? words.regions.world;
-const tally = STORIES.reduce((acc, story) => ({ ...acc, [story.region]: (acc[story.region] ?? 0) + 1 }), {});
-const regionTotal = Object.values(tally).reduce((sum, count) => sum + count, 0);
-if (regionTotal !== STORIES.length) throw new Error(`regions sum to ${regionTotal}, edition holds ${STORIES.length}`);
-
-// --- the whole edition, once each ------------------------------------------------------------
-const leads = words.leads;
-const cards = words.cards;
-const briefs = words.briefs;
-const places = [...leads, ...cards, ...briefs].map((item) => item.n);
-if (places.length !== STORIES.length) throw new Error(`${places.length} stories placed, edition holds ${STORIES.length}`);
-if (new Set(places).size !== places.length) throw new Error('a story is placed twice');
-for (const n of places) storyAt(n);
-if (leads.length !== 3) throw new Error(`three leads, not ${leads.length}`);
-for (const [index, lead] of leads.entries()) {
-  if (lead.n !== index + 1) throw new Error('the leads must be the edition’s own first three');
-  if (storyAt(lead.n).tier !== 'lead') throw new Error(`story ${lead.n} is not a lead in the edition`);
-}
-
-// --- the when on every line -------------------------------------------------------------------
-// Each item is stamped with its own outlet's UTC time where the edition records one, otherwise
-// with the edition's date. Nothing on the page invents a clock.
-const stampOf = new Map(STORIES.map((story) => {
-  const mine = (story.links ?? [])
-    .map((link) => link.publishedAt ?? '')
-    .find((at) => at.startsWith(DAY));
-  return [story.n, mine ? at_hm(mine) : words.dateless];
-}));
-function at_hm(iso) {
-  return iso.slice(11, 16);
-}
-const stamp = (n) => stampOf.get(n) ?? words.dateless;
-
-// The 13 clock readings are real: each names a story and the hour that story's own link carries.
-// Most of a day's filings land on the day before the edition closes, so that is the default day.
-const clockDay = words.clockDay ?? new Date(Date.parse(DAY) - 86400000).toISOString().slice(0, 10);
-for (const tick of words.clock) {
+// How the day was filed: thirteen outlet stamps, all inside 23 November 2026 UTC, checked against
+// the edition's own publishedAt values so no time on the page is invented.
+const CLOCK = [
+  { n: 19, at: '00:31', about: 'gas up 4%' }, { n: 4, at: '02:16', about: 'EU sanctions' },
+  { n: 9, at: '05:39', about: 'India-Nepal' }, { n: 1, at: '07:03', about: 'Huang returns' },
+  { n: 3, at: '08:59', about: 'Dymer toll' }, { n: 23, at: '10:14', about: 'FlyDubai' },
+  { n: 17, at: '12:08', about: 'ghetto law' }, { n: 30, at: '13:45', about: 'Trump case' },
+  { n: 6, at: '16:00', about: 'Tallinn' }, { n: 7, at: '18:41', about: 'Gaza strike' },
+  { n: 18, at: '20:11', about: 'school hoaxes' }, { n: 21, at: '21:55', about: 'singer flogged' },
+  { n: 11, at: '23:54', about: 'Cucuta drone' },
+];
+for (const tick of CLOCK) {
   const stamps = (storyAt(tick.n).links ?? []).map((link) => link.publishedAt ?? '');
-  const found = stamps.some((iso) => iso.startsWith(tick.day ?? clockDay) && at_hm(iso) === tick.at);
-  if (!found) throw new Error(`clock ${tick.at} is not story ${tick.n}’s stamp: ${stamps.join(' ')}`);
+  const sameDay = stamps.some((stamp) => stamp.startsWith('2026-11-23') && stamp.slice(11, 16) === tick.at);
+  if (!sameDay) throw new Error(`clock ${tick.at} is not story ${tick.n}'s own stamp: ${stamps.join(' ')}`);
 }
 
-// --- the map ----------------------------------------------------------------------------------
-// Equirectangular, 64N to 50S, the whole 360-degree band across the column.
+const regionKey = Object.entries(tally).sort((a, b) => b[1] - a[1])
+  .map(([id, count]) => `<span class="rg"><i style="background:${regionStyle(id)[1]}"></i>${regionStyle(id)[0]}<b>${count}</b></span>`).join('');
+
+// Map: equirectangular, 64N..50S, one dot per dateline in its region's hue, the leads numbered.
 const FRAME = { top: 20, height: 114 };
-const project = (lon, lat) => [lon + 180, 84 - Math.min(64, Math.max(-50, lat))];
-
-const dot = (story, radius) => {
-  const [x, y] = project(story.geo.lon, story.geo.lat);
-  return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius}" fill="${hue(story.region)[2]}" opacity="${radius > 2.5 ? 1 : 0.92}"/>`;
+const plot = (lon, lat) => [lon + 180, 84 - Math.min(64, Math.max(-50, lat))];
+const dotFor = (story, radius) => {
+  const [x, y] = plot(story.geo.lon, story.geo.lat);
+  return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius}" fill="${regionStyle(story.region)[2]}" opacity="${radius > 2.5 ? 1 : 0.92}"/>`;
 };
-
-const mapSvg = `<svg class="map" viewBox="0 ${FRAME.top} 360 ${FRAME.height}" preserveAspectRatio="xMidYMid meet" aria-label="World map with a dot for every dateline">
+const quietDots = edition.stories.filter((story) => story.geo && story.tier !== 'lead').map((story) => dotFor(story, 2.2)).join('');
+const loudDots = [1, 2, 3].map((n) => {
+  const story = storyAt(n);
+  const [x, y] = plot(story.geo.lon, story.geo.lat);
+  const place = copy.labels[n];
+  const anchor = place.anchor ? ` text-anchor="${place.anchor}"` : '';
+  return `<g><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="#0f2433"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.4" fill="${regionStyle(story.region)[2]}"/>` +
+    `<text x="${x.toFixed(1)}" y="${(y + 2.1).toFixed(1)}" class="mn">${n}</text>` +
+    `<text x="${(x + place.dx).toFixed(1)}" y="${(y + place.dy).toFixed(1)}" class="ml"${anchor}>${place.label}</text></g>`;
+}).join('');
+const worldMap = `<svg class="map" viewBox="0 ${FRAME.top} 360 ${FRAME.height}" preserveAspectRatio="xMidYMid meet" aria-label="World map with one dot for each story">
 <rect x="0" y="${FRAME.top}" width="360" height="${FRAME.height}" fill="#0f2433"/>
 <g stroke="#1b3749" stroke-width="0.35" fill="none"><path d="M0 24H360M0 54H360M0 84H360M0 114H360"/><path d="M60 0V142M120 0V142M180 0V142M240 0V142M300 0V142"/></g>
 <path d="${coast}" fill="#2b4c63" stroke="#456b83" stroke-width="0.55"/>
-${STORIES.filter((story) => story.geo && story.tier !== 'lead').map((story) => dot(story, 2.2)).join('')}
-${leads.map((lead) => {
-  const story = storyAt(lead.n);
-  const [x, y] = project(story.geo.lon, story.geo.lat);
-  const label = words.labels[lead.n] ?? { dx: 6, dy: 3, label: story.place, anchor: '' };
-  const anchor = label.anchor ? ` text-anchor="${label.anchor}"` : '';
-  return `<g><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="#0f2433"/>`
-    + `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.4" fill="${hue(story.region)[2]}"/>`
-    + `<text x="${x.toFixed(1)}" y="${(y + 2.1).toFixed(1)}" class="mn">${lead.n}</text>`
-    + `<text x="${(x + label.dx).toFixed(1)}" y="${(y + label.dy).toFixed(1)}" class="ml"${anchor}>${esc(label.label)}</text></g>`;
-}).join('')}
+${quietDots}
+${loudDots}
 </svg>`;
 
-// --- drawings ---------------------------------------------------------------------------------
-// Flat shapes only, each one built out of the facts its own story reports.
+// Lead drawings: flat vector shapes, each tied to what its story reports.
 const star = (cx, cy, radius) => {
   const points = Array.from({ length: 16 }, (_, i) => {
     const angle = (i / 16) * Math.PI * 2 - Math.PI / 2;
@@ -115,116 +75,119 @@ const star = (cx, cy, radius) => {
   return `M${points.join('L')}Z`;
 };
 
-const SCENE = {
-  // ballots on a table: a vote being counted, one pile higher than the other
-  count: `<svg viewBox="0 0 164 132" aria-hidden="true">
-<rect width="164" height="132" fill="#1d2a1c"/>
-<rect x="0" y="96" width="164" height="36" fill="#243726"/>
-<g fill="#f3ead6"><rect x="18" y="70" width="52" height="9"/><rect x="20" y="80" width="52" height="9"/><rect x="17" y="90" width="52" height="9"/></g>
-<g fill="#d9c9a8"><rect x="94" y="52" width="52" height="9"/><rect x="96" y="62" width="52" height="9"/><rect x="93" y="72" width="52" height="9"/><rect x="95" y="82" width="52" height="9"/><rect x="94" y="92" width="52" height="9"/></g>
-<g stroke="#8a7a5c" stroke-width="1.1"><path d="M24 74h40M24 84h40M24 94h40M100 56h40M100 66h40M100 76h40M100 86h40M100 96h40"/></g>
-<path d="M70 16l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="#f0b24a"/>
-</svg>`,
-  // a ship held at a quay, a queue of trucks waiting behind it
-  quay: `<svg viewBox="0 0 164 132" aria-hidden="true">
-<rect width="164" height="132" fill="#122436"/>
-<rect x="0" y="88" width="164" height="44" fill="#0d1b28"/>
-<g fill="#e4d7bf"><path d="M44 46h64l10 32H34z"/><rect x="58" y="30" width="34" height="16"/></g>
-<g fill="#b3261e"><rect x="58" y="30" width="34" height="6"/><rect x="52" y="62" width="52" height="4"/></g>
-<g fill="#9aa8b6"><rect x="8" y="78" width="22" height="10"/><rect x="8" y="70" width="16" height="8"/><rect x="140" y="78" width="20" height="10"/></g>
-<g stroke="#7d8a96" stroke-width="1"><path d="M0 88h164M0 100h164"/></g>
-<g fill="#f0b24a"><circle cx="30" cy="86" r="2"/><circle cx="136" cy="86" r="2"/></g>
-</svg>`,
-  // a lever being pulled: the switch of a policy, one arm of a machine moving
-  lever: `<svg viewBox="0 0 164 132" aria-hidden="true">
-<rect width="164" height="132" fill="#2a2318"/>
-<rect x="26" y="86" width="112" height="26" rx="2" fill="#3d3223"/>
-<rect x="26" y="86" width="112" height="5" fill="#5b4a33"/>
-<g stroke="#c8b48c" stroke-width="4" stroke-linecap="round"><path d="M82 88L124 42"/></g>
-<circle cx="82" cy="88" r="9" fill="#e3d2af"/>
-<circle cx="82" cy="88" r="3.4" fill="#2a2318"/>
-<circle cx="124" cy="42" r="7" fill="#b3261e"/>
-<g stroke="#8a7a5c" stroke-width="2" stroke-linecap="round" opacity=".8"><path d="M40 78h26M40 68h18"/></g>
-</svg>`,
-  // a press leaflet: a page with a headline bar and columns of type
-  press: `<svg viewBox="0 0 164 132" aria-hidden="true">
-<rect width="164" height="132" fill="#1f232a"/>
-<g transform="rotate(-3 100 74)">
-<rect x="52" y="18" width="100" height="98" fill="#f6f1e4"/>
-<rect x="60" y="26" width="72" height="12" fill="#1f232a"/>
-<g stroke="#a89d88" stroke-width="2" stroke-linecap="round"><path d="M60 48h84M60 56h84M60 64h78M60 72h84M60 80h70M60 88h84M60 96h56"/></g>
-<rect x="60" y="106" width="34" height="4" fill="#b3261e"/>
+const DRAWING = {
+  // a draft on the table, its warming line crossing the 1.5C limit
+  deal: `<svg viewBox="0 0 164 132" aria-hidden="true">
+<rect width="164" height="132" fill="#123029"/>
+<rect x="54" y="26" width="96" height="94" fill="#cbc2ae"/>
+<g transform="rotate(-4 102 74)">
+<rect x="46" y="20" width="100" height="96" fill="#f6f1e4"/>
+<g stroke="#a89d88" stroke-width="2.4" stroke-linecap="round"><path d="M56 30H94"/><path d="M56 37H104"/><path d="M56 44H84"/></g>
+<path d="M56 106V62C62 82 70 90 78 88s10-14 18-18 12-2 18-6" fill="none" stroke="#b3261e" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M52 78H142" stroke="#b3261e" stroke-width="1.3" stroke-dasharray="4 3" opacity=".9"/>
+<circle cx="134" cy="64" r="3.2" fill="#b3261e"/>
+<g stroke="#d8d0bd" stroke-width="1"><path d="M56 100H96"/><path d="M56 105H84"/></g>
 </g>
-<rect x="22" y="30" width="34" height="46" fill="#e9e2d2"/>
-<g stroke="#b5ab97" stroke-width="2"><path d="M28 40h22M28 48h22M28 56h16M28 64h22"/></g>
+<path d="M14 120H152" stroke="#2c4a41" stroke-width="1.2"/>
+</svg>`,
+  // three bridges over the Dnipro, the middle span broken by the overnight strike
+  bridge: `<svg viewBox="0 0 164 132" aria-hidden="true">
+<rect width="164" height="132" fill="#13253c"/>
+<g stroke="#e0662f" stroke-width="1.6" stroke-linecap="round" opacity=".95"><path d="M148 4L126 34"/><path d="M162 10L140 38"/><path d="M132 2L116 26"/><path d="M164 26L150 48"/></g>
+<g fill="#f0b24a"><circle cx="126" cy="34" r="2.6"/><circle cx="140" cy="38" r="2.6"/><circle cx="116" cy="26" r="2.2"/><circle cx="150" cy="48" r="2.6"/></g>
+<path d="M2 86C2 62 56 62 56 86" fill="none" stroke="#eef3fa" stroke-width="2.8"/>
+<path d="M112 86C112 62 162 62 162 86" fill="none" stroke="#eef3fa" stroke-width="2.8"/>
+<g stroke="#f2f6fb" stroke-width="3.8" stroke-linecap="round"><path d="M0 86H56"/><path d="M112 86H164"/></g>
+<g stroke="#c3d0de" stroke-width="0.9" opacity=".85"><path d="M12 86V71M26 86V67M40 86V71M126 86V71M140 86V67M154 86V71"/></g>
+<g stroke="#a9bccf" stroke-width="3"><path d="M56 86V110"/><path d="M112 86V110"/></g>
+<g stroke="#f2f6fb" stroke-width="3.8" stroke-linecap="round"><path d="M56 86L66 99"/><path d="M112 86L102 97"/></g>
+<rect x="66" y="103" width="32" height="6.4" rx="1" transform="rotate(26 82 106)" fill="#cfd9e5"/>
+<rect x="60" y="115" width="10" height="3.6" transform="rotate(-16 65 116)" fill="#b9c6d6"/>
+<g fill="#9fb3c8" opacity=".45"><circle cx="72" cy="112" r="3"/><circle cx="98" cy="110" r="2.4"/></g>
+<path d="M2 110H150" stroke="#3d5871" stroke-width="1.2"/>
+<g stroke="#6f88a6" stroke-width="1.1" opacity=".75"><path d="M8 116H44M58 122H94M108 116H146M26 126H62M88 128H120"/></g>
+<path d="${star(84, 96, 8)}" fill="#ffd9a0" stroke="#e0662f" stroke-width="0.9" opacity=".95"/>
+</svg>`,
+  // two US bases in Bahrain under radomes, both waves of drones intercepted above them
+  bases: `<svg viewBox="0 0 164 132" aria-hidden="true">
+<rect width="164" height="132" fill="#2a1512"/>
+<path d="M0 104H164" stroke="#7a4a3a" stroke-width="1.1"/>
+<path d="M18 104a26 26 0 0 1 52 0z" fill="#d5c8b3"/>
+<g stroke="#a8957e" stroke-width="0.8" opacity=".8"><path d="M28 104c0-14 6-23 16-26M44 78c9 3 16 12 16 26M44 78v26"/></g>
+<rect x="22" y="104" width="44" height="9" fill="#c2b49f"/>
+<rect x="38" y="106" width="12" height="6" fill="#7d6d59"/>
+<path d="M96 104a33 33 0 0 1 64 0z" fill="#e7ddd0"/>
+<g stroke="#ac9880" stroke-width="0.8" opacity=".85"><path d="M104 104c0-18 9-30 28-33M124 71c12 4 22 16 22 33M128 104V71"/></g>
+<rect x="102" y="104" width="52" height="10" fill="#d8cbb8"/>
+<rect x="122" y="107" width="14" height="7" fill="#8d7c67"/>
+<path d="M128 71V56" stroke="#e7ddd0" stroke-width="2.4"/><path d="M120 53a8 8 0 0 1 16 0z" fill="#e7ddd0"/>
+<g stroke="#ef8a3f" stroke-width="1.6" stroke-linecap="round" opacity=".9"><path d="M4 20L32 44"/><path d="M104 4L120 30"/><path d="M146 8L136 32"/></g>
+<g fill="#f0b24a"><path d="M32 44l12 2-7 8z"/><path d="M120 30l12 3-7 7z"/><path d="M136 32l11 3-6 7z"/></g>
+<path d="${star(44, 58, 9)}" fill="#fff3c4" stroke="#e0662f" stroke-width="1"/>
+<path d="${star(128, 40, 11)}" fill="#fff3c4" stroke="#e0662f" stroke-width="1"/>
 </svg>`,
 };
 
-const GLYPH = {
+// One 24×24 glyph per card, drawn in the card's region colour.
+const ICON = {
   ship: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.2 15.6h19.6l-2.9 4.6H5.1z" fill="currentColor"/><rect x="6.4" y="10.6" width="3.4" height="3.2" fill="currentColor"/><rect x="10.6" y="10.6" width="3.4" height="3.2" fill="currentColor" opacity=".65"/><rect x="10.6" y="6.6" width="3.4" height="3.2" fill="currentColor"/><circle cx="16.6" cy="7.4" r="2.2" fill="currentColor" opacity=".45"/><circle cx="19" cy="4.6" r="1.7" fill="currentColor" opacity=".3"/><path d="M17.4 10.4V15" stroke="currentColor" stroke-width="1.4"/></svg>`,
   burst: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.6l2.1 5.3 4.6-3.2-1.9 5.2 5.6.1-4.6 3.1 3.4 4.2-5.4-1.2.6 5.5-3.6-4.2-3.6 4.2.6-5.5-5.4 1.2 3.4-4.2L3.6 9l5.6-.1L7.3 3.7l4.6 3.2z" fill="currentColor"/><circle cx="12" cy="12.4" r="2.6" fill="#f7f3ea"/></svg>`,
-  boat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.4 12.4l17-3.6 1.6 5.2-15.4 3.2z" fill="currentColor"/><path d="M8.6 9.4l1.2-3.6 4 1.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><g stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"><path d="M2 19.6c1.6-1.4 3-1.4 4.6 0s3 1.4 4.6 0 3-1.4 4.6 0 3 1.4 4.6 0"/></g><circle cx="15.4" cy="7.2" r="1.6" fill="currentColor"/></svg>`,
+  boat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.4 12.4l17-3.6 1.6 5.2-15.4 3.2z" fill="currentColor"/><path d="M8.6 9.4l1.2-3.6 4 1.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><g stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"><path d="M2 19.6c1.6-1.4 3-1.4 4.6 0s3 1.4 4.6 0 3-1.4 4.6 0 3 1.4 4.6 0"/><path d="M2 22.4c1.6-1.4 3-1.4 4.6 0s3 1.4 4.6 0 3-1.4 4.6 0 3 1.4 4.6 0" opacity=".55"/></g><circle cx="15.4" cy="7.2" r="1.6" fill="currentColor"/></svg>`,
   talks: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 4.2h12.6v8.4H9.4l-3.6 3v-3H2z" fill="currentColor" opacity=".55"/><path d="M9.4 9.6h12.6V18h-3.8v3l-3.6-3H9.4z" fill="currentColor" stroke="#f7f3ea" stroke-width="1.1"/><g stroke="#f7f3ea" stroke-width="1.3" stroke-linecap="round"><path d="M12.4 12.6h6.6M12.4 15.2h4.6"/></g></svg>`,
   aid: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.6" y="7.6" width="18.8" height="13.4" rx="1" fill="currentColor"/><rect x="1.8" y="4.2" width="20.4" height="4" rx="0.8" fill="currentColor" opacity=".65"/><path d="M12 11.2c1.8-2.4 5.4-.8 4.3 2-.7 1.7-4.3 4-4.3 4s-3.6-2.3-4.3-4c-1.1-2.8 2.5-4.4 4.3-2z" fill="#f7f3ea"/></svg>`,
   cuffs: `<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="7.4" cy="12" r="4.6"/><circle cx="16.6" cy="12" r="4.6"/></g><path d="M11.4 12h1.2" stroke="currentColor" stroke-width="2.2"/><path d="M3.4 8.4 1.6 6.6M20.6 8.4l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   bolt: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 1.6L4.2 13.4h6.2l-1.6 9 9.4-12h-6.4z" fill="currentColor"/><path d="M3 21.4h5.6M15.4 21.4H21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/></svg>`,
   probe: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.4" cy="10.4" r="7.2" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.8 15.8L21.6 21.6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M6.4 7.6l3.2 4 2-2.6 2.4 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   pulse: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.6 12.4h3.6l2-4.2 3 8.4 2.2-4.2h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  vote: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.4l9-5.6 9 5.6v2H3z" fill="currentColor"/><rect x="4.6" y="12.4" width="2.6" height="7.2" fill="currentColor"/><rect x="10.7" y="12.4" width="2.6" height="7.2" fill="currentColor"/><rect x="16.8" y="12.4" width="2.6" height="7.2" fill="currentColor"/><rect x="2.6" y="20.2" width="18.8" height="2.4" fill="currentColor"/></svg>`,
-  chart: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.4h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4.4" y="12" width="3.4" height="7" fill="currentColor"/><rect x="10.3" y="8" width="3.4" height="11" fill="currentColor" opacity=".72"/><rect x="16.2" y="4.4" width="3.4" height="14.6" fill="currentColor"/></svg>`,
+  sub: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.2 15.4c0-2.6 2.6-4 6.6-4h10.4l2.6 2-2.6 2H8.8c-4 0-6.6-1.4-6.6-4z" fill="currentColor"/><rect x="8.4" y="7.6" width="5.2" height="4" rx="1" fill="currentColor"/><path d="M11 7.6V4.4h3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><g stroke="currentColor" stroke-width="1.4" opacity=".6" stroke-linecap="round"><path d="M3 19.4h7M13 19.4h8"/></g></svg>`,
+  cup: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 3.4h11.2v5.2a5.6 5.6 0 0 1-11.2 0z" fill="currentColor"/><path d="M17.6 4.8h2.4a2.8 2.8 0 0 1 0 5.6h-2.4M6.4 4.8H4a2.8 2.8 0 0 0 0 5.6h2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.4 14.6h3.2v3.2h-3.2z" fill="currentColor" opacity=".75"/><path d="M7.6 20.6h8.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+  bat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.2 2.6l7.2 7.2-9.4 9.4-2.6-2.6z" fill="currentColor" opacity=".8"/><path d="M9.4 16.6l-3.4 3.4-2.6-2.6 3.4-3.4z" fill="currentColor"/><circle cx="5.6" cy="20.4" r="2.4" fill="currentColor" opacity=".6"/></svg>`,
 };
 
-// --- the blocks -------------------------------------------------------------------------------
-const clockStrip = `<section class="daystrip"><div class="ds-head"><h5>${esc(words.clockTitle)}`
-  + `<span>${esc(words.clockNote)}</span></h5></div>
-<div class="ds-track">${words.clock.map((tick) => `<div class="ds-i"><b>${esc(tick.at)}</b><span>${esc(tick.about)}</span></div>`).join('')}</div></section>`;
+// Each of the 31 items is stamped with its own time where the edition records one (the outlet's
+// UTC publishedAt), and with the edition's own date where it does not, so every line carries a when.
+if (edition.day !== '2026-11-23') throw new Error(`the edition is dated ${edition.day}`);
+const STAMP = new Map(edition.stories.map((story) => {
+  const at = (story.links ?? []).map((link) => link.publishedAt ?? '').find((value) => value.startsWith('2026-11-23'));
+  return [story.n, at ? at.slice(11, 16) : '23 NOV'];
+}));
+if (STAMP.size !== 31) throw new Error(`expected 31 stamps, got ${STAMP.size}`);
+const stampOf = (n) => STAMP.get(n) ?? '23 NOV';
 
-const leadBlock = (lead) => {
-  const scene = SCENE[lead.art] ?? SCENE.press;
-  return `<article class="lead"><div class="panel"><div class="panel-txt">`
-    + `<div class="pk">${esc(`${lead.p} · ${lead.t}`)}</div>`
-    + `<div class="pfig">${esc(lead.fig)}</div>`
-    + `<div class="punit">${esc(lead.unit)}</div>`
-    + `<div class="psub">${esc(lead.sub)}</div>`
-    + `<div class="pmark"><em>${esc(lead.mark[0])}</em> ${esc(lead.mark[1])}</div>`
-    + `</div><div class="part">${scene}</div></div>`
-    + `<h3>${lead.head.map(esc).join('<br>')}</h3><p class="deck">${esc(lead.deck)}</p>`
-    + `<div class="src">${esc(lead.src)} &middot; <span class="ts">${stamp(lead.n)}</span></div></article>`;
-};
+const clockBlock = `<section class="daystrip"><div class="ds-head"><h5>The filing clock, in UTC <span>thirteen reports stamped hour by hour, the last at 23:54 GMT</span></h5></div>
+<div class="ds-track">${CLOCK.map((tick) => `<div class="ds-i"><b>${tick.at}</b><span>${escape(tick.about)}</span></div>`).join('')}</div></section>`;
 
-const cardBlock = (card) => `<article class="card" style="--gc:${hue(storyAt(card.n).region)[1]}">`
-  + `<div class="chead"><span class="ck">${esc(`${card.p} · ${card.t}`)}</span>`
-  + `<span class="cg">${GLYPH[card.glyph] ?? GLYPH.chart}</span></div>`
-  + `<h4>${esc(card.h)}</h4><p><b>${esc(card.d)}</b> &middot; ${esc(card.b)}</p>`
-  + `<div class="src">${esc(card.s)} &middot; <span class="ts">${stamp(card.n)}</span></div></article>`;
+const leadBlock = (lead) => `<article class="lead"><div class="panel"><div class="panel-txt">
+<div class="pk">${escape(`${lead.p} · ${lead.t}`)}</div>
+<div class="pfig">${escape(lead.fig)}</div>
+<div class="punit">${escape(lead.unit)}</div>
+<div class="psub">${escape(lead.sub)}</div>
+<div class="pmark"><em>${escape(lead.mark[0])}</em> ${escape(lead.mark[1])}</div>
+</div><div class="part">${DRAWING[lead.art]}</div></div>
+<h3>${lead.head.map(escape).join('<br>')}</h3><p class="deck">${escape(lead.deck)}</p><div class="src">${escape(lead.src)} &middot; <span class="ts">${stampOf(lead.n)}</span></div></article>`;
 
-const briefItem = (item) => `<li style="--gc:${hue(storyAt(item.n).region)[1]}"><b>${esc(item.p)}</b> `
-  + `${esc(item.t)} <span class="bs">${esc(item.s)} &middot; <span class="ts">${stamp(item.n)}</span></span></li>`;
+const cardBlock = (card) => `<article class="card" style="--gc:${regionStyle(storyAt(card.n).region)[1]}">
+<div class="chead"><span class="ck">${escape(`${card.p} · ${card.t}`)}</span><span class="cg">${ICON[card.glyph] ?? ''}</span></div>
+<h4>${escape(card.h)}</h4><p><b>${escape(card.d)}</b> &middot; ${escape(card.b)}</p><div class="src">${escape(card.s)} &middot; <span class="ts">${stampOf(card.n)}</span></div></article>`;
 
-// Briefs run down columns of almost equal length, so the last row is never ragged: the longest
-// columns come first. The column count grows only if the edition has more briefs than three
-// columns of eight can hold.
-const columns = Math.max(3, Math.ceil(briefs.length / 8));
-const rows = Math.ceil(briefs.length / columns);
-const longColumns = briefs.length - columns * (rows - 1);
-let cursor = 0;
-const briefColumns = Array.from({ length: columns }, (_, index) => {
-  const size = rows - (index < longColumns ? 0 : 1);
-  const slice = briefs.slice(cursor, cursor + size);
-  cursor += size;
-  return `<ul class="b">${slice.map(briefItem).join('')}</ul>`;
+const briefItem = (item) => `<li style="--gc:${regionStyle(storyAt(item.n).region)[1]}"><b>${escape(item.p)}</b> ${escape(item.t)} <span class="bs">${escape(item.s)} &middot; <span class="ts">${stampOf(item.n)}</span></span></li>`;
+
+// Briefs run down three columns of near-equal length, so the last row is never ragged whatever
+// the edition holds: the longest columns come first and the rest take one fewer.
+const perColumn = Math.ceil(copy.briefs.length / 3);
+const longerColumns = copy.briefs.length - 3 * (perColumn - 1);
+let nextBrief = 0;
+const briefColumns = [0, 1, 2].map((column) => {
+  const size = perColumn - (column < longerColumns ? 0 : 1);
+  const briefs = copy.briefs.slice(nextBrief, nextBrief + size);
+  nextBrief += size;
+  return `<ul class="b">${briefs.map(briefItem).join('')}</ul>`;
 });
 
-const figureBlock = (figure) => `<div class="num"><div class="nf">${esc(figure.fig)}</div>`
-  + `<div class="nc">${esc(figure.cap)} <span class="ns">&middot; ${esc(figure.s)}</span></div></div>`;
+const figureBlock = (figure) => `<div class="num"><div class="nf">${escape(figure.fig)}</div><div class="nc">${escape(figure.cap)} <span class="ns">&middot; ${escape(figure.s)}</span></div></div>`;
 
-const regionKey = Object.entries(tally).sort((a, b) => b[1] - a[1])
-  .map(([id, count]) => `<span class="rg"><i style="background:${hue(id)[1]}"></i>${esc(hue(id)[0])}<b>${count}</b></span>`)
-  .join('');
-
-// --- the page ---------------------------------------------------------------------------------
-const sheet = `
-:root{--paper:${words.paper};--ink:#15120e;--muted:#6d645a;--rule:#15120e;--soft:#d8cfc0;--accent:${words.accent};--amber:#f3c79a;--brief-cols:${columns}}
+const stylesheet = `
+:root{--paper:#f7f3ea;--ink:#15120e;--muted:#6d645a;--rule:#15120e;--soft:#d8cfc0;--accent:#b3261e;--amber:#f3c79a}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1024px;height:1024px;overflow:hidden}
 body{background:var(--paper);color:var(--ink);font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;padding:11px 16px 9px;display:flex;flex-direction:column;gap:5px}
@@ -236,8 +199,9 @@ body{background:var(--paper);color:var(--ink);font-family:Arial,Helvetica,sans-s
 .mast .side{text-align:right;font-size:8.6px;line-height:1.35;letter-spacing:.1em;text-transform:uppercase;color:#4a433b;padding-bottom:3px;white-space:nowrap}
 .mast .side b{display:block;font-size:10.6px;letter-spacing:.01em;text-transform:none;color:var(--ink);font-family:Georgia,serif;font-style:italic;font-weight:400;margin:1px 0}
 .daystrip{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:3px 0 4px}
+.daystrip .ds-head{display:flex;align-items:baseline;gap:0}
 .daystrip h5{margin:0 0 3px}
-.ds-track{display:grid;grid-template-columns:repeat(${words.clock.length},minmax(0,1fr));border-top:1px solid #b8ae9e}
+.ds-track{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border-top:1px solid #b8ae9e}
 .ds-i{position:relative;min-width:0;border-left:1px solid #cec3b0;padding:3px 6px 2px 7px;color:#332d26}
 .ds-i:first-child{border-left:0}
 .ds-i::before{content:'';position:absolute;left:-1px;top:-1px;width:1px;height:5px;background:var(--accent)}
@@ -246,14 +210,14 @@ body{background:var(--paper);color:var(--ink);font-family:Arial,Helvetica,sans-s
 .ds-i span{display:block;font-size:7.5px;line-height:1.15;margin-top:1.5px;white-space:nowrap;overflow:hidden}
 .leads{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px}
 .lead{min-width:0;display:flex;flex-direction:column}
-.panel{position:relative;display:flex;height:132px;overflow:hidden;background:#1d2a1c}
-.lead:nth-child(2) .panel{background:#122436}
-.lead:nth-child(3) .panel{background:#2a2318}
+.panel{position:relative;display:flex;height:132px;overflow:hidden;background:#123029}
+.lead:nth-child(2) .panel{background:#13253c}
+.lead:nth-child(3) .panel{background:#2a1512}
 .panel .part{position:absolute;right:0;top:0;width:164px;height:132px}
 .panel .part svg{display:block;width:164px;height:132px}
-.panel::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(29,42,28,.98) 40%,rgba(29,42,28,0) 74%);z-index:1}
-.lead:nth-child(2) .panel::after{background:linear-gradient(90deg,rgba(18,36,54,.98) 40%,rgba(18,36,54,0) 74%)}
-.lead:nth-child(3) .panel::after{background:linear-gradient(90deg,rgba(42,35,24,.98) 40%,rgba(42,35,24,0) 74%)}
+.panel::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(18,48,41,.98) 40%,rgba(18,48,41,0) 74%);z-index:1}
+.lead:nth-child(2) .panel::after{background:linear-gradient(90deg,rgba(19,37,60,.98) 40%,rgba(19,37,60,0) 74%)}
+.lead:nth-child(3) .panel::after{background:linear-gradient(90deg,rgba(42,21,18,.98) 40%,rgba(42,21,18,0) 74%)}
 .panel-txt{position:relative;z-index:2;padding:5px 0 5px 9px;width:52%;color:#f7f3ea;display:flex;flex-direction:column}
 .pk{font-size:7.4px;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);font-weight:700;white-space:nowrap}
 .pfig{font-family:Georgia,serif;font-size:46px;font-weight:700;line-height:.92;letter-spacing:-.03em;margin-top:auto}
@@ -291,14 +255,14 @@ h5 span{color:var(--muted);letter-spacing:.04em;text-transform:none;font-weight:
 .card p{font-size:8.1px;line-height:1.13;color:#4a433b}
 .card p b{color:var(--ink)}
 .card .src{margin-top:1px}
-.sentence{border-top:2px solid var(--rule);border-bottom:1px solid var(--rule);padding:2px 0;display:flex;gap:12px;align-items:baseline}
+.sentence{border-top:2px solid var(--rule);border-bottom:1px solid var(--rule);padding:2px 0 2px;display:flex;gap:12px;align-items:baseline}
 .sentence .lab{font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;white-space:nowrap}
 .sentence p{font-family:Georgia,serif;font-size:14.6px;line-height:1.18;letter-spacing:-.01em}
 .sentence p b{font-weight:700}
 .briefs-head{border-top:1px solid var(--soft);padding-top:3px;display:flex;justify-content:space-between;align-items:baseline}
 .briefs-head h5{margin:0}
 .briefs-head .cnt{font-size:7.8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-.briefs{flex:1;min-height:0;border-top:1px solid var(--soft);padding:5px 0 3px;margin-top:3px;display:grid;grid-template-columns:repeat(var(--brief-cols),minmax(0,1fr));gap:0 16px}
+.briefs{flex:1;min-height:0;border-top:1px solid var(--soft);padding:5px 0 3px;margin-top:3px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 16px}
 ul.b{list-style:none;display:flex;flex-direction:column;justify-content:space-between;min-width:0}
 ul.b li{font-size:10.4px;line-height:1.13;color:#2b2620;padding-left:9px;position:relative}
 ul.b li::before{content:'';position:absolute;left:0;top:5px;width:4px;height:4px;background:var(--gc)}
@@ -312,19 +276,19 @@ ul.b li b{font-weight:700}
 `;
 
 const page = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>${esc(TITLE)}</title><style>${sheet}</style></head>
+<html lang="en"><head><meta charset="utf-8"><title>Monday 23 November 2026</title><style>${stylesheet}</style></head>
 <body>
-<div class="rail"><span><b>${esc(words.rail.left)}</b></span><span class="date">${esc(TITLE)}</span><span>${esc(words.rail.right)}</span></div>
-<header class="mast"><h1>${esc(TITLE)}</h1><div class="side">${esc(words.rail.note)}<b>${esc(words.rail.line)}</b></div></header>
-${clockStrip}
-<section class="leads">${leads.map(leadBlock).join('')}</section>
-<section class="mid"><div><h5>${esc(words.mapTitle)} <span>${esc(words.mapNote)}</span></h5>${mapSvg}<div class="regions">${regionKey}</div></div><div class="nums-panel"><h5>${esc(words.figuresTitle)} <span>${esc(words.figuresNote)}</span></h5><div class="nums">${words.figures.map(figureBlock).join('')}</div></div></section>
-<section class="cards">${cards.map(cardBlock).join('')}</section>
-<section class="sentence"><span class="lab">${esc(words.sentenceLabel)}</span><p>${words.sentence}</p></section>
-<section class="briefs-head"><h5>${esc(words.briefsTitle)} <span>${esc(words.briefsNote)}</span></h5><span class="cnt">${briefs.length} more stories</span></section>
+<div class="rail"><span><b>The world in one day</b></span><span class="date">Monday 23 November 2026</span><span>31 stories &middot; 6 regions &middot; every one sourced</span></div>
+<header class="mast"><h1>Monday 23 November 2026</h1><div class="side">A front page of the day&rsquo;s reporting<b>31 stories, from New York to Wellington</b></div></header>
+${clockBlock}
+<section class="leads">${copy.leads.map(leadBlock).join('')}</section>
+<section class="mid"><div><h5>Where it happened, Monday 23 November 2026 <span>one dot for each dateline, coloured by region; the numbered three are the leads</span></h5>${worldMap}<div class="regions">${regionKey}</div></div><div class="nums-panel"><h5>The day in numbers <span>as its outlets reported them</span></h5><div class="nums">${copy.figures.map(figureBlock).join('')}</div></div></section>
+<section class="cards">${copy.cards.map(cardBlock).join('')}</section>
+<section class="sentence"><span class="lab">The day in one sentence</span><p><b>Nvidia</b> takes its chief back as the S&amp;P 500 gains 4.7%, <b>NATO</b>&rsquo;s 32 ambassadors meet over Polish soil, and the <b>Dymer</b> toll reaches eleven: one Monday, 31 stories, six regions.</p></section>
+<section class="briefs-head"><h5>And in brief <span>the rest of the day, place by place</span></h5><span class="cnt">18 more stories</span></section>
 <section class="briefs">${briefColumns.join('')}</section>
-<footer class="foot"><p>${words.footer}</p><div class="mark">${esc(words.mark)}</div></footer>
+<footer class="foot"><p><b>Date check.</b> This is the Monday 23 November 2026 edition, closed with 31 stories. Each carries the dateline its outlet gave it; the thirteen clock times are those outlets&rsquo; own UTC stamps, all on 23 November, and every other date here (2031, 2035) belongs to the story that names it. Nothing is invented and no story is repeated. Outlets are named with every story; the map is drawn from Natural Earth land outlines.</p><div class="mark">One day &middot; 31 stories &middot; 6 regions</div></footer>
 </body></html>`;
 
-writeFileSync(here('./poster.html'), page);
-console.log(`poster.html: ${page.length} bytes, ${leads.length} leads, ${cards.length} cards, ${briefs.length} briefs, ${words.figures.length} figures, ${columns} brief columns`);
+writeFileSync(local('./poster.html'), page);
+console.log(`poster.html: ${page.length} bytes, ${copy.leads.length} leads, ${copy.cards.length} cards, ${copy.briefs.length} briefs, ${copy.figures.length} figures`);

@@ -8,10 +8,58 @@
     "oceania": ["Oceania", "#0d6070", "#45c2d6"],
     "world": ["World", "#43403a", "#c9ced4"]
   },
-  "leads": [],
-  "cards": [],
-  "briefs": [],
-  "figures": [],
-  "labels": {},
-  "claims": []
+  "leads": [
+    {"n": 1, "p": "NEW YORK", "t": "MARKETS", "fig": "4.7%", "unit": "the S&P 500's gain", "sub": "Nvidia leads the chip rebound; Huang resigned 11 days ago", "art": "deal", "mark": ["The turn", "the board brought him back"], "head": ["Huang returns to Nvidia,", "and Wall Street rallies"], "deck": "The board reinstated Jensen Huang as chief executive; chip stocks led the gains and the S&P 500 closed 4.7% higher.", "src": "Reuters · 24/7 Wall St."},
+    {"n": 2, "p": "BRUSSELS", "t": "NATO", "fig": "32", "unit": "allies at the table", "sub": "ambassadors meet; Polish soil hit on Friday", "art": "bases", "mark": ["The claim", "Warsaw blames Russian missiles"], "head": ["NATO calls an emergency", "session on Poland"], "deck": "All 32 ambassadors met after Warsaw said Russian missiles, one of them a Kh-101, came down on Polish soil on Friday.", "src": "Stars and Stripes · RBC-Ukraine"},
+    {"n": 3, "p": "DYMER, UKRAINE", "t": "WAR", "fig": "11", "unit": "dead in the flats", "sub": "rescuers found another body on Monday", "art": "bridge", "mark": ["The toll", "it rose again on Monday"], "head": ["Dymer's toll rises", "to eleven dead"], "deck": "Rescuers pulled another body from the rubble of a strike on apartment blocks; the dead include a teenager.", "src": "Ukrinform · Intellinews"}
+  ],
+  "cards": [
+    {"n": 4, "glyph": "bolt", "p": "BRUSSELS", "t": "SANCTIONS", "d": "60 banks", "h": "The EU proposes a new Russia package", "b": "The draft cuts 60 banks from SWIFT and adds a sports ban.", "s": "Independent Journal Review"},
+    {"n": 5, "glyph": "cuffs", "p": "LUSAKA", "t": "POLITICS", "d": "Treason charge", "h": "Zambia indicts its opposition chief", "b": "The election runner-up, Mundubile, now faces a treason trial.", "s": "Sundiatapost"},
+    {"n": 6, "glyph": "talks", "p": "MOSCOW", "t": "DIPLOMACY", "d": "“Open war”", "h": "Russia protests Tallinn's border plan", "b": "Moscow says Estonia's move to close the crossing courts open war.", "s": "Al Jazeera"},
+    {"n": 7, "glyph": "aid", "p": "GAZA", "t": "AID", "d": "3 killed", "h": "A UN worker is killed in Gaza", "b": "UNRWA names Adel al-Helo, struck near a well.", "s": "Middle East Monitor"},
+    {"n": 8, "glyph": "probe", "p": "WASHINGTON", "t": "IRAN", "d": "Two dozen firms", "h": "The US targets Iran's ‘shadow banks’", "b": "Treasury hits exchange houses and fronts used to move money.", "s": "Le Monde"},
+    {"n": 9, "glyph": "pulse", "p": "NEW DELHI", "t": "AID", "d": "$1.62bn", "h": "India pledges flood relief to Nepal", "b": "The money comes as Nepal's new prime minister visits.", "s": "BBC"},
+    {"n": 10, "glyph": "burst", "p": "INDONESIA", "t": "DISASTER", "d": "24 dead", "h": "The factory fire toll rises again", "b": "The search goes on at the burnt-out candy plant.", "s": "The Daily Star"},
+    {"n": 11, "glyph": "burst", "p": "CÚCUTA, COLOMBIA", "t": "SECURITY", "d": "3 hurt", "h": "A drone strikes a police base", "b": "A baby is among the wounded; 60 homes were damaged.", "s": "Associated Press"},
+    {"n": 12, "glyph": "cup", "p": "UNITED STATES", "t": "FOOTBALL", "d": "2031", "h": "FIFA picks a US-led bid for the Women's World Cup", "b": "The UK is confirmed as host for 2035.", "s": "NBC 5 Dallas-Fort Worth"},
+    {"n": 13, "glyph": "bat", "p": "WELLINGTON", "t": "CRICKET", "d": "Drawn", "h": "New Zealand hold India to a draw", "b": "NZ were 239-5 in their second innings, 113 behind.", "s": "AFP"}
+  ],
+  "briefs": [
+    {"n": 14, "p": "Finland", "t": "summons Russia's ambassador over its ‘reckless actions’", "s": "Euronews"},
+    {"n": 15, "p": "Belgium", "t": "a strike halts flights 06:00–20:00", "s": "Anadolu Agency"},
+    {"n": 16, "p": "Ukraine", "t": "Zelensky seeks four-way peace talks", "s": "Moneycontrol"},
+    {"n": 17, "p": "Denmark", "t": "the top court backs the ‘ghetto law’", "s": "Deutsche Welle"},
+    {"n": 18, "p": "Germany", "t": "hoax threats hit 450 schools", "s": "The Punch"},
+    {"n": 19, "p": "Europe", "t": "gas rises 4% as a cold snap nears", "s": "Oil Price US"},
+    {"n": 20, "p": "Russia", "t": "a report counts 1,000+ army suicides", "s": "The Guardian"},
+    {"n": 21, "p": "Iran", "t": "a lawyer says a singer was flogged", "s": "BBC"},
+    {"n": 23, "p": "Israel", "t": "clears FlyDubai flights to return", "s": "Jerusalem Post"},
+    {"n": 24, "p": "Yemen", "t": "the ministry says a strike kills 6", "s": "News search"},
+    {"n": 25, "p": "Senegal", "t": "the U-17s beat Cuba 9-0 at the World Cup", "s": "DNE Africa"},
+    {"n": 27, "p": "Bangladesh", "t": "garment pay talks fail", "s": "News search"},
+    {"n": 28, "p": "Tajikistan", "t": "files to quit the ICC", "s": "News search"},
+    {"n": 29, "p": "United States", "t": "Trump orders faster executions", "s": "RTÉ Ireland"},
+    {"n": 30, "p": "United States", "t": "the Trump case moves to a federal court", "s": "Politico"},
+    {"n": 31, "p": "United States", "t": "two states sue over Grok’s AI images", "s": "CNET"},
+    {"n": 32, "p": "United States", "t": "oil falls 3.9% on glut fears", "s": "News search"},
+    {"n": 33, "p": "Australia", "t": "the jobless rate is forecast above 5%", "s": "News search"}
+  ],
+  "figures": [
+    {"fig": "4.7%", "cap": "the S&P 500's gain as chip stocks rallied", "s": "Reuters"},
+    {"fig": "32", "cap": "allies at NATO's emergency session", "s": "Stars and Stripes"},
+    {"fig": "11", "cap": "dead in the strike on Dymer's flats", "s": "Ukrinform"},
+    {"fig": "60", "cap": "banks the EU would cut from SWIFT", "s": "Independent Journal Review"},
+    {"fig": "$1.62bn", "cap": "India pledges to Nepal for flood recovery", "s": "BBC"},
+    {"fig": "24", "cap": "dead in Indonesia's factory fire", "s": "The Daily Star"},
+    {"fig": "450", "cap": "schools hit by hoax threats in Germany", "s": "The Punch"},
+    {"fig": "9-0", "cap": "Senegal's win over Cuba at the U-17 World Cup", "s": "DNE Africa"},
+    {"fig": "1,000+", "cap": "army suicides counted in a Russian report", "s": "The Guardian"},
+    {"fig": "3.9%", "cap": "the fall in oil prices on glut fears", "s": "News search"}
+  ],
+  "labels": {
+    "1": {"label": "NEW YORK", "dx": -6, "dy": -6, "anchor": "end"},
+    "2": {"label": "BRUSSELS", "dx": 6, "dy": -5, "anchor": ""},
+    "3": {"label": "DYMER", "dx": 8, "dy": 1.5, "anchor": ""}
+  }
 }
