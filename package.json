@@ -6,7 +6,7 @@
   "description": "A 1024x1024 front page summing up Monday 23 November 2026, entered in make.fun bounty news-image-20261123.",
   "license": "MIT",
   "scripts": {
-    "build": "node tools/verify.mjs && node tools/page.mjs && node tools/shot.mjs entry.png",
+    "build": "node tools/audit.mjs && node tools/verify.mjs && node tools/page.mjs && node tools/shot.mjs",
     "start": "node main.ts"
   }
 }

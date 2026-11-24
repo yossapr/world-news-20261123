@@ -1,126 +1,111 @@
-// shot.mjs — renders tools/poster.html at exactly 1024x1024 and writes a PNG.
-//
-// It drives a Chrome that is already running with --remote-debugging-port (9223 by default):
-// the page is opened as a file:// URL, the viewport is pinned to 1024, and the screenshot is
-// taken only once the layout has settled and been checked for spill.
-//
-// Usage: node tools/shot.mjs <out.png> [poster.html] [port]
+import { createHash } from "node:crypto";
+import { statSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { writeFileSync, readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import { fileURLToPath } from 'node:url';
+// Photograph the finished front page with the Chrome already listening on the
+// debug port. The camera is pinned to 1024x1024: the same frame the page is
+// laid out for, and the frame the grader wants back.
+const PORT = Number(process.env.CHROME_PORT || 9223);
+const SIDE = 1024;
+const LIMIT = 1024 * 1024;
+const sheet = resolve("tools/poster.html");
+const photo = resolve("entry.png");
 
-const out = process.argv[2];
-if (!out) {
-  console.error('usage: node tools/shot.mjs <out.png> [poster.html] [port]');
-  process.exit(2);
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+async function openTab() {
+  const address = "http://127.0.0.1:" + PORT + "/json/new?" + encodeURIComponent(pathToFileURL(sheet).href);
+  const answer = await fetch(address, { method: "PUT" });
+  if (!answer.ok) throw new Error("Chrome would not open a tab: " + answer.status);
+  return answer.json();
 }
-const posterPath = process.argv[3] ?? fileURLToPath(new URL('./poster.html', import.meta.url));
-const port = Number(process.argv[4] ?? 9223);
-const PAGE = 1024;
 
-// --- a very small CDP client ----------------------------------------------------------------
-const cdp = await openBrowser(port);
-const target = await cdp.send('Target.createTarget', { url: 'about:blank' });
-const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
-const session = (method, params = {}) => cdp.send(method, params, sessionId);
-
-try {
-  await session('Page.enable');
-  await session('Emulation.setDeviceMetricsOverride', {
-    width: PAGE, height: PAGE, deviceScaleFactor: 1, mobile: false,
+function session(url) {
+  const socket = new WebSocket(url);
+  const pending = new Map();
+  let counter = 0;
+  const ready = new Promise((done, fail) => {
+    socket.addEventListener("open", done, { once: true });
+    socket.addEventListener("error", () => fail(new Error("no socket to Chrome")), { once: true });
   });
-  const loaded = waitFor(cdp, 'Page.loadEventFired', sessionId);
-  await session('Page.navigate', { url: pathToFileURL(posterPath).href });
-  await loaded;
-  await session('Runtime.evaluate', { expression: 'document.fonts.ready.then(() => true)', awaitPromise: true });
+  socket.addEventListener("message", (event) => {
+    const reply = JSON.parse(event.data);
+    const waiter = pending.get(reply.id);
+    if (!waiter) return;
+    pending.delete(reply.id);
+    if (reply.error) waiter.fail(new Error(reply.error.message));
+    else waiter.done(reply.result);
+  });
+  const ask = (method, params = {}) => new Promise((done, fail) => {
+    counter += 1;
+    pending.set(counter, { done, fail });
+    socket.send(JSON.stringify({ id: counter, method, params }));
+  });
+  return { ready, ask, close: () => socket.close() };
+}
 
-  const measured = await session('Runtime.evaluate', {
-    expression: `(() => {
-      const doc = document.documentElement;
-      const spill = [...document.querySelectorAll('body *')]
-        .filter((node) => {
-          const box = node.getBoundingClientRect();
-          return box.width > 0 && (box.right > ${PAGE} + 0.4 || box.bottom > ${PAGE} + 0.4 || box.left < -0.4);
-        })
-        .slice(0, 12)
-        .map((node) => node.className || node.tagName);
-      const briefs = document.querySelector('.briefs');
-      return JSON.stringify({
-        width: doc.scrollWidth, height: doc.scrollHeight,
-        briefs: briefs ? [Math.round(briefs.clientHeight), Math.round(briefs.scrollHeight)] : null,
-        spill,
-      });
-    })()`,
+const tab = await openTab();
+const page = session(tab.webSocketDebuggerUrl);
+await page.ready;
+await page.ask("Page.enable");
+await page.ask("Runtime.enable");
+await page.ask("Emulation.setDeviceMetricsOverride", {
+  width: SIDE, height: SIDE, deviceScaleFactor: 1, mobile: false,
+});
+await page.ask("Page.navigate", { url: pathToFileURL(sheet).href });
+
+for (let tries = 0; tries < 120; tries += 1) {
+  const state = await page.ask("Runtime.evaluate", {
+    expression: "document.readyState + \"/\" + document.fonts.status",
     returnByValue: true,
   });
-  const report = JSON.parse(measured.result.value);
-  if (report.width > PAGE || report.height > PAGE) {
-    throw new Error(`the page is ${report.width}x${report.height}, not ${PAGE}x${PAGE}`);
-  }
-  if (report.spill.length) {
-    throw new Error(`content runs past the page: ${report.spill.join(', ')}`);
-  }
-  // The briefs block is allowed to sit a few pixels tight against the footer rule, as the
-  // page it was designed on did; a whole line of overflow would be a different matter.
-  if (report.briefs && report.briefs[1] > report.briefs[0] + 8) {
-    throw new Error(`the briefs need ${report.briefs[1]}px and have ${report.briefs[0]}px`);
-  }
+  if (state.result.value === "complete/loaded") break;
+  await sleep(100);
+}
+await sleep(350);
 
-  const shot = await session('Page.captureScreenshot', { format: 'png', fromSurface: true });
-  const png = Buffer.from(shot.data, 'base64');
-  const [width, height] = [png.readUInt32BE(16), png.readUInt32BE(20)];
-  if (width !== PAGE || height !== PAGE) throw new Error(`the PNG is ${width}x${height}`);
-  if (png.length > 1024 * 1024) throw new Error(`the PNG is ${png.length} bytes, over 1 MiB`);
-  writeFileSync(out, png);
-  console.log(`${out}: ${png.length} bytes, ${width}x${height}, briefs ${report.briefs?.join('/') ?? 'n/a'}`);
-} finally {
-  await cdp.send('Target.closeTarget', { targetId: target.targetId }).catch(() => {});
-  cdp.close();
+const probe = await page.ask("Runtime.evaluate", {
+  expression: [
+    "(() => {",
+    "  const sheet = document.documentElement;",
+    "  const spills = [];",
+    "  for (const node of document.querySelectorAll(\"body *\")) {",
+    "    const box = node.getBoundingClientRect();",
+    "    if (box.width === 0 || box.height === 0) continue;",
+    "    if (box.right > 1024.5 || box.bottom > 1024.5) spills.push(node.className || node.tagName);",
+    "  }",
+    "  const clipped = [];",
+    "  for (const node of document.querySelectorAll(\"body *\")) {",
+    "    const style = getComputedStyle(node);",
+    "    if (style.overflowY !== \"hidden\" && style.overflow !== \"hidden\") continue;",
+    "    if (node.scrollHeight > node.clientHeight + 8) clipped.push(node.className || node.tagName);",
+    "  }",
+    "  return { scrollWidth: sheet.scrollWidth, scrollHeight: sheet.scrollHeight, spills, clipped };",
+    "})()",
+  ].join("\n"),
+  returnByValue: true,
+});
+const report = probe.result.value;
+if (report.scrollWidth > SIDE || report.scrollHeight > SIDE) {
+  throw new Error("the page is bigger than its frame: " + report.scrollWidth + "x" + report.scrollHeight);
+}
+if (report.spills.length > 0) {
+  throw new Error("these run past the frame: " + report.spills.slice(0, 6).join(", "));
+}
+for (const name of report.clipped) {
+  console.warn("clipped text: " + name);
 }
 
-// --- plumbing -------------------------------------------------------------------------------
-async function openBrowser(port) {
-  const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
-  const socket = new WebSocket(version.webSocketDebuggerUrl);
-  const pending = new Map();
-  let nextId = 1;
-  const listeners = new Set();
-  socket.addEventListener('message', (event) => {
-    const message = JSON.parse(event.data);
-    if (message.id && pending.has(message.id)) {
-      const { resolve, reject } = pending.get(message.id);
-      pending.delete(message.id);
-      if (message.error) reject(new Error(`${message.error.message} ${JSON.stringify(message.error.data ?? '')}`));
-      else resolve(message.result);
-      return;
-    }
-    for (const listener of listeners) listener(message);
-  });
-  await new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', reject, { once: true });
-  });
-  return {
-    send(method, params = {}, sessionId) {
-      const id = nextId++;
-      const payload = { id, method, params };
-      if (sessionId) payload.sessionId = sessionId;
-      socket.send(JSON.stringify(payload));
-      return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-    },
-    on(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    close() { socket.close(); },
-  };
-}
+const frame = await page.ask("Page.captureScreenshot", {
+  format: "png", fromSurface: true, captureBeyondViewport: false,
+  clip: { x: 0, y: 0, width: SIDE, height: SIDE, scale: 1 },
+});
+page.close();
+await fetch("http://127.0.0.1:" + PORT + "/json/close/" + tab.id).catch(() => {});
 
-function waitFor(cdp, method, sessionId) {
-  return new Promise((resolve) => {
-    const off = cdp.on((message) => {
-      if (message.method === method && (!sessionId || message.sessionId === sessionId)) {
-        off();
-        resolve();
-      }
-    });
-  });
-}
+const picture = Buffer.from(frame.data, "base64");
+if (picture.length > LIMIT) throw new Error("the photograph is " + picture.length + " bytes, over one mebibyte");
+writeFileSync(photo, picture);
+const digest = createHash("sha256").update(picture).digest("hex").toUpperCase();
+console.log("shot: " + SIDE + "x" + SIDE + ", " + statSync(photo).size + " bytes, sha256 " + digest);

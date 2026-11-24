@@ -1,24 +1,26 @@
-// main.ts — the Node 22 entrypoint make.fun grades.
-//
-// The finished page is committed beside this file as entry.png. Every run copies those exact
-// bytes to <output>/entry.png, so two runs are identical by construction and nothing needs the
-// network, a browser or the news desk. Rebuilding the image from the edition:
-//   node tools/verify.mjs && node tools/page.mjs && node tools/shot.mjs entry.png
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL('.', import.meta.url));
-const bytes = readFileSync(join(root, 'entry.png'));
+// The entry is the finished front page, rendered once and committed as a PNG.
+// This program checks that the committed picture is really a 1024x1024 PNG
+// under the size floor, then places it where the grader looks for it.
+const root = dirname(fileURLToPath(import.meta.url));
+const picture = join(root, "entry.png");
+const drop = process.env.MAKEFUN_OUTPUT_DIR || "/output";
 
-// A PNG whose header is not 1024x1024 is not this competition's answer, so refuse to ship it.
-if (bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error('entry.png is not a PNG');
-const [width, height] = [bytes.readUInt32BE(16), bytes.readUInt32BE(20)];
-if (width !== 1024 || height !== 1024) throw new Error(`entry.png is ${width}x${height}, must be 1024x1024`);
-if (bytes.length > 1024 * 1024) throw new Error(`entry.png is ${bytes.length} bytes, over 1 MiB`);
+const bytes = readFileSync(picture);
+const wants = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+for (let i = 0; i < wants.length; i += 1) {
+  if (bytes[i] !== wants[i]) throw new Error("entry.png is not a PNG file");
+}
+const wide = bytes.readUInt32BE(16);
+const tall = bytes.readUInt32BE(20);
+if (wide !== 1024 || tall !== 1024) {
+  throw new Error("entry.png is " + wide + "x" + tall + ", not 1024x1024");
+}
+if (statSync(picture).size > 1024 * 1024) throw new Error("entry.png is over one mebibyte");
 
-const outDir = process.env.MAKEFUN_OUTPUT_DIR || '/output';
-mkdirSync(outDir, { recursive: true });
-const target = join(outDir, 'entry.png');
-writeFileSync(target, bytes);
-console.log(`entry.png (${bytes.length} bytes, ${width}x${height}) written to ${target}`);
+mkdirSync(drop, { recursive: true });
+copyFileSync(picture, join(drop, "entry.png"));
+console.log("entry.png (" + statSync(picture).size + " bytes, " + wide + "x" + tall + ") written to " + join(drop, "entry.png"));
