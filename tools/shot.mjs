@@ -97,14 +97,27 @@ for (const name of report.clipped) {
   console.warn("clipped text: " + name);
 }
 
-const frame = await page.ask("Page.captureScreenshot", {
-  format: "png", fromSurface: true, captureBeyondViewport: false,
-  clip: { x: 0, y: 0, width: SIDE, height: SIDE, scale: 1 },
-});
+const shoot = async () => {
+  const frame = await page.ask("Page.captureScreenshot", {
+    format: "png", fromSurface: true, captureBeyondViewport: false,
+    clip: { x: 0, y: 0, width: SIDE, height: SIDE, scale: 1 },
+  });
+  return Buffer.from(frame.data, "base64");
+};
+
+// Chrome paints the same frame twice in a row or not at all: take photographs
+// until two of them agree, and keep the one that did.
+let picture = await shoot();
+for (let look = 0; look < 4; look += 1) {
+  await sleep(250);
+  const again = await shoot();
+  if (again.equals(picture)) break;
+  console.warn("frame moved between shots, retaking (" + look + ")");
+  picture = again;
+}
 page.close();
 await fetch("http://127.0.0.1:" + PORT + "/json/close/" + tab.id).catch(() => {});
 
-const picture = Buffer.from(frame.data, "base64");
 if (picture.length > LIMIT) throw new Error("the photograph is " + picture.length + " bytes, over one mebibyte");
 writeFileSync(photo, picture);
 const digest = createHash("sha256").update(picture).digest("hex").toUpperCase();
